@@ -1,0 +1,30 @@
+# Connect with required permissions
+Connect-MgGraph -Scopes "DeviceManagementManagedDevices.ReadWrite.All"
+
+# Fetch devices not synced since 2025-07-10 and missing UPN
+$devices = Get-MgDeviceManagementManagedDevice -Filter "lastSyncDateTime lt 2025-06-28T00:00:00Z" `
+    -Property "id,deviceName,complianceState,lastSyncDateTime,userPrincipalName"
+
+$noUPNDevices = $devices | Where-Object { [string]::IsNullOrWhiteSpace($_.UserPrincipalName) }
+
+# Show the list before deletion
+$noUPNDevices | Format-Table `
+    @{Label="Device Name"; Expression={$_.DeviceName}}, `
+    @{Label="Compliance"; Expression={$_.ComplianceState}}, `
+    @{Label="Last Sync"; Expression={($_.LastSyncDateTime).ToLocalTime()}}, `
+    @{Label="Device ID"; Expression={$_.Id}} -AutoSize
+
+Write-Host "`nDevices eligible for deletion:`t$($noUPNDevices.Count)" -ForegroundColor Yellow
+
+# Prompt before deletion
+$confirm = Read-Host "Do you want to delete these devices? (yes/no)"
+
+if ($confirm -eq "yes") {
+    foreach ($device in $noUPNDevices) {
+        Write-Host "Deleting: $($device.DeviceName)" -ForegroundColor Red
+        Remove-MgDeviceManagementManagedDevice -ManagedDeviceId $device.Id
+    }
+    Write-Host "`nDeletion complete." -ForegroundColor Green
+} else {
+    Write-Host "`nDeletion cancelled." -ForegroundColor Cyan
+}
